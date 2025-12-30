@@ -1,0 +1,50 @@
+```mermaid
+graph TD
+    subgraph User
+        A[User]
+    end
+
+    subgraph "Docker Environment"
+        B(docker-compose up)
+        C(app service)
+        D(data-mcp service)
+        E(neo4j-mcp service)
+        F(neo4j service)
+        G(neo4j-init service)
+        H(jupyter service)
+    end
+
+    subgraph "Application Logic (in app service)"
+        I(main.py)
+        J(AgenticThreatHunt Flow)
+        K(Profiler Agent)
+        L(Architect Agent)
+        M(Planner Agent)
+        N(Query Engineer Agent)
+        O(Triage Agent)
+    end
+
+    A -- runs --> B
+    B -- starts --> C
+    B -- starts --> D
+    B -- starts --> E
+    B -- starts --> F
+    B -- starts --> G
+    B -- starts --> H
+
+    G -- initializes --> F
+    C -- runs --> I
+    I -- starts --> J
+
+    J -- uses --> K
+    J -- uses --> L
+    J -- uses --> M
+    J -- uses --> N
+    J -- uses --> O
+
+    K -- interacts with --> D
+    L -- interacts with --> E
+    N -- receives plan from --> M
+    O -- interacts with --> D
+
+```
