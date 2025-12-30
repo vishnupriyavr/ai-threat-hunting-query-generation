@@ -15,8 +15,7 @@ This project implements an agentic AI solution for automated threat hunting. It 
 ### Installation
 1. **Clone the repository:**
    ```bash
-   git clone [https://github.com/your-repo/agentic-threat-hunter.git](https://github.com/your-repo/agentic-threat-hunter.git)
-   cd agentic-threat-hunter
+   git clone https://github.com/your-repo/agentic-threat-hunter.git
 2. **Install requirements:**
     ```bash
     pip install -r requirements.txt
