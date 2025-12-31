@@ -7,31 +7,38 @@ This project implements an agentic AI solution for automated threat hunting. It 
 
 ## 1. Setup Instructions
 
+To get started with the AI Threat Hunting - Query Generation System, please follow the steps below.
+
 ### Prerequisites
-* **Python 3.11**
-* **Neo4j** (Local instance or Neo4j Aura)
-* **OpenAI API Key** (or Gemini/Claude equivalent)
+*   **Python 3.11**
+*   **Neo4j** (Local instance or Neo4j Aura)
+*   **OpenAI API Key** (or Gemini/Claude equivalent)
 
 ### Installation
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/your-repo/agentic-threat-hunter.git
-2. **Install requirements:**
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/your-repo/agentic-threat-hunter.git
+    cd agentic-threat-hunter
+    ```
+2.  **Install requirements:**
     ```bash
     pip install -r requirements.txt
-**Requirements: crewai, neo4j, pandas, pydantic, duckdb, openai**
+    ```
+    **Key Requirements**: `crewai`, `neo4j`, `pandas`, `pydantic`, `duckdb`, `openai`.
 
-3. **Configure Environment:** 
+3.  **Configure Environment:** 
     
-    Create a .env file in the root directory:
+    Create a `.env` file in the root directory and populate it with your API key and Neo4j credentials:
     ```bash
     OPENAI_API_KEY=your_key_here
     NEO4J_URI=bolt://localhost:7687
     NEO4J_USER=neo4j
     NEO4J_PASSWORD=your_password
+    ```
+    For Docker-based setup, refer to the [Docker (optional)](#docker-optional) section.
 
 ## Architecture Overview
-The system follows a Plan-Execute-Verify cycle using a Multi-Agent orchestrator (CrewAI Flows).
+The system follows a Plan-Execute-Verify cycle using a Multi-Agent orchestrator (CrewAI Flows). For a more in-depth explanation of the architectural approach, refer to the [Approach Document](docs/APPROACH.md).
 
 **Hypothesis Input:** The agent reads from hypotheses.json.
 
@@ -50,7 +57,7 @@ The system follows a Plan-Execute-Verify cycle using a Multi-Agent orchestrator 
 
 ## Mermaid Diagram (renderable)
 
-If your markdown renderer supports Mermaid, you can view an interactive diagram below.
+If your markdown renderer supports Mermaid, you can view an interactive diagram below. The source for this diagram can be found at [docs/architecture.mmd](docs/architecture.mmd).
 
 ```mermaid
 graph TD
@@ -174,6 +181,10 @@ docker-compose run --rm neo4j-init
 This executes `scripts/neo4j/init_ontology.cql` via `cypher-shell` and creates a few example events, fields, constraints, and sample mappings.
 
 ## Design Decisions and Trade-offs
+For a deeper dive into the thought process behind this project, including specific challenges encountered and explainability considerations, please refer to:
+*   [Challenges Faced](docs/CHALLENGES_FACED.md)
+*   [Explainability](docs/EXPLAINABILITY.md)
+
 **GraphRAG vs Vector RAG:** I chose GraphRAG because security log schemas are relational. Vector similarity is poor at distinguishing between nearly identical AWS API calls; a Graph provides strict schema enforcement.
 
 **Stateful Orchestration**: I use CrewAI Flows to allow the agent to "loop back." If a query for id_5 (Whoami Reconnaissance) fails, the agent can re-reason and check if the logs use a different version of the API.
@@ -209,3 +220,4 @@ Below are references and helpful resources used for this implementation:
 7. https://www.youtube.com/watch?v=7JZrJ2K39wE
 8. https://www.youtube.com/watch?v=IgKP25HFqFU
 9. https://www.youtube.com/watch?v=IgKP25HFqFU
+10. https://docs.crewai.com/en/concepts/flows
