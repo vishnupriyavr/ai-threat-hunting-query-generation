@@ -10,7 +10,7 @@ This project implements an agentic AI solution for automated threat hunting. It 
 To get started with the AI Threat Hunting - Query Generation System, please follow the steps below.
 
 ### Prerequisites
-*   **Python 3.11**
+*   **Python 3.12**
 *   **Neo4j** (Local instance or Neo4j Aura)
 *   **OpenAI API Key** (or Gemini/Claude equivalent)
 
