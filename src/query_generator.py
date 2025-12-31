@@ -110,7 +110,25 @@ class AgenticThreatHunt:
             return "execute_threat_hunt"
         
         if len(state.query_results) > 1000:
-            log.info("Results too noisy. Directing Strategist to refine filters.")
+            log.info("High volume of results detected. Performing cardinality check...")
+            try:
+                import pandas as pd
+                results_df = pd.DataFrame(state.query_results)
+                
+                # Check for sourceIPAddress cardinality as a heuristic for distributed events
+                if "sourceIPAddress" in results_df.columns:
+                    unique_ips = results_df["sourceIPAddress"].nunique()
+                    ip_to_row_ratio = unique_ips / len(results_df)
+                    
+                    # If >10% of results have a unique IP, it's likely a widespread event, not noise
+                    if ip_to_row_ratio > 0.1:
+                        log.info(f"Cardinality analysis shows a high IP-to-row ratio ({ip_to_row_ratio:.2f}). Treating as a widespread event, not noise.")
+                        return "end_flow"
+
+            except ImportError:
+                log.warning("Pandas is not installed. Falling back to simple row count for noise detection.")
+            
+            log.info("Results deemed too noisy. Directing Strategist to refine filters.")
             state.plan.refine("further restrict the results")
             return "execute_threat_hunt"
             
