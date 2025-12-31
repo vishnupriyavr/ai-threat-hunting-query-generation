@@ -1,109 +1,172 @@
 import streamlit as st
-import threading
 import logging
-import queue
+import sys
+import re
+import os
 import time
-from src.query_generator import AgenticThreatHunt, HuntState
+import json
+from src.query_generator import AgenticThreatHunt
+from dotenv import load_dotenv
 
-# Frontend for Live Agentic Threat Hunt using Streamlit
-class StreamlitLogHandler(logging.Handler):
-    def __init__(self, log_queue):
-        super().__init__()
-        self.log_queue = log_queue
+# Load environment variables
+load_dotenv()
 
-    def emit(self, record):
-        self.log_queue.put(self.format(record))
+# Load hypotheses from JSON file
+try:
+    with open("assignment/hypotheses.json", "r") as f:
+        HYPOTHESES = json.load(f)
+except FileNotFoundError:
+    st.error("Error: hypotheses.json not found. Make sure it's in the 'assignment/' directory.")
+    HYPOTHESES = []
 
-# --- 2. UI Setup ---
+# --- 1. Custom Buffer to Capture Agent Thoughts ---
+class SimpleCapture:
+    """Captures the agent's 'thought process' from stdout for the UI."""
+    def __init__(self):
+        self.content = ""
+    def write(self, data):
+        # Remove ANSI color codes that look like [32m in the UI
+        clean_data = re.sub(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])', '', data)
+        self.content += clean_data
+    def flush(self):
+        pass
+
+# --- 2. Page Configuration ---
 st.set_page_config(page_title="Agentic Threat Hunt", layout="wide")
-st.title("Live Agentic Threat Hunt")
+st.title("🛡️ Agentic Threat Hunt")
 
 # Initialize Session State
-if "logs" not in st.session_state:
-    st.session_state.logs = []
 if "hunt_result" not in st.session_state:
     st.session_state.hunt_result = None
+if "final_answer" not in st.session_state:
+    st.session_state.final_answer = None
+if "raw_logs" not in st.session_state:
+    st.session_state.raw_logs = ""
+if "running" not in st.session_state:
+    st.session_state.running = False
 
-# --- 3. The Execution Thread ---
-def run_flow_thread(log_queue, hypothesis_id):
-    # Setup logging to capture agent outputs
-    handler = StreamlitLogHandler(log_queue)
-    logger = logging.getLogger()
-    logger.addHandler(handler)
-    logger.setLevel(logging.INFO)
-
-    # Initialize and Run the Flow
-    flow = AgenticThreatHunt()
-    flow.state.current_hypothesis_id = hypothesis_id
-    
-    # Kickoff the flow
-    result = flow.kickoff()
-    st.session_state.hunt_result = flow.state
-    logger.removeHandler(handler)
-
+# --- 3. Sidebar Control ---
 with st.sidebar:
-    hyp_id = st.text_input("Enter Hypothesis ID", value="HYP-007")
-    if st.button("Kickoff Hunt", type="primary"):
-        st.session_state.logs = []
-        st.session_state.hunt_result = None
-        log_queue = queue.Queue()
-        
-        # Start the thread
-        thread = threading.Thread(target=run_flow_thread, args=(log_queue, hyp_id))
-        thread.start()
-        st.session_state.running = True
-        st.session_state.log_queue = log_queue
-
-
-col1, col2 = st.columns([1, 1])
-
-with col1:
-    st.subheader("Agent Activity Log")
-    log_container = st.empty()
+    st.header("Hunt Configuration")
     
-    # Periodically update logs from the queue
-    if "log_queue" in st.session_state:
-        while not st.session_state.log_queue.empty():
-            msg = st.session_state.log_queue.get()
-            st.session_state.logs.append(msg)
-        
-        log_text = "\n".join(st.session_state.logs)
-        log_container.text_area("Live Feed", value=log_text, height=400)
-        
-        # Auto-refresh UI to show new logs
-        if any(t.is_alive() for t in threading.enumerate() if t.name == "Thread-1"):
-            time.sleep(0.5)
+    # Create a mapping from ID to full hypothesis string for the selectbox
+    hypothesis_options = {hyp["id"]: f"{hyp['id']}: {hyp['name']} - {hyp['hypothesis']}" for hyp in HYPOTHESES}
+    
+    selected_hyp_id = st.selectbox(
+        "Select Hypothesis",
+        options=list(hypothesis_options.keys()),
+        format_func=lambda x: hypothesis_options[x]
+    )
+    
+    start_btn = st.button("Kickoff Hunt", type="primary", disabled=st.session_state.running)
+
+# --- 4. Main Logic Execution ---
+if start_btn:
+    st.session_state.running = True
+    st.session_state.raw_logs = "" # Clear previous logs
+    
+    # Retrieve the selected hypothesis text
+    selected_hypothesis_text = next(
+        (hyp["hypothesis"] for hyp in HYPOTHESES if hyp["id"] == selected_hyp_id),
+        "No hypothesis found for this ID."
+    )
+    
+    with st.spinner("Agents are analyzing logs and generating queries..."):
+        # Redirect stdout to our capture object to grab terminal logs
+        capture_buffer = SimpleCapture()
+        old_stdout = sys.stdout
+        sys.stdout = capture_buffer
+
+        try:
+            # Instantiate and run the flow
+            flow = AgenticThreatHunt()
+            flow.state.current_hypothesis_id = selected_hyp_id
+            flow.state.hypothesis_text = selected_hypothesis_text # Pass the hypothesis text
+            
+            # kickoff() returns the Final Answer (JSON findings) from the Triage Agent
+            final_ans = flow.kickoff()
+            
+            # Save results to session state
+            st.session_state.final_answer = final_ans
+            st.session_state.hunt_result = flow.state
+            st.session_state.raw_logs = capture_buffer.content
+            
+        except Exception as e:
+            st.error(f"An error occurred during the hunt: {e}")
+        finally:
+            # Restore standard output and update status
+            sys.stdout = old_stdout
+            st.session_state.running = False
             st.rerun()
 
+# --- 5. UI Layout ---
+col1, col2 = st.columns([1, 1])
+
+# LEFT COLUMN: Live/Static Process Logs
+with col1:
+    st.subheader("Agent Activity Log")
+    if st.session_state.raw_logs:
+        st.text_area(
+            "Agent Reasoning Process", 
+            value=st.session_state.raw_logs, 
+            height=700,
+            help="This shows the step-by-step logic the agents used."
+        )
+    elif st.session_state.running:
+        st.info("The agents are working. Results will appear here shortly...")
+    else:
+        st.info("Log will appear here after execution.")
+
+# RIGHT COLUMN: Structured Results
 with col2:
     st.subheader("Final State & Findings")
+    
     if st.session_state.hunt_result:
         res = st.session_state.hunt_result
         st.success("Hunt Complete!")
-        st.metric("Total Retries", res.retry_count)
         
-        # New: Display Hypothesis Interpretation
-        if res.hypothesis_interpretation:
-            st.markdown(f"**Hypothesis Interpretation:** {res.hypothesis_interpretation}")
+        # A. Metrics Row
+        m1, m2 = st.columns(2)
+        m1.metric("Retries", getattr(res, 'retry_count', 0))
+        conf = getattr(res, 'confidence_score', None)
+        if conf:
+            m2.metric("Confidence", f"{conf}%")
 
-        # New: Display Query Reasoning
-        if res.query_reasoning:
-            st.markdown(f"**Query Reasoning:** {res.query_reasoning}")
-
-        # New: Display Assumptions Made
-        if res.assumptions_made:
-            st.markdown(f"**Assumptions Made:** {res.assumptions_made}")
-
-        # New: Display Confidence Score
-        if res.confidence_score: # Only display if score is available (non-zero)
-            st.metric(f"Confidence Score", f"{res.confidence_score:.2f}%")
-            if res.confidence_explanation:
-                st.caption(f"Reasoning: {res.confidence_explanation}")
+        # B. Hypothesis and Reasoning (MOVED UP)
+        st.markdown(f"**Hypothesis Interpretation:**\n{getattr(res, 'hypothesis_interpretation', 'N/A')}")
         
-        with st.expander("Generated Athena Query"):
-            st.code(res.generated_query, language="sql")
+        with st.expander("🔍 Reasoning & Assumptions", expanded=True):
+            reasoning = getattr(res, 'query_reasoning', None)
+            if reasoning:
+                st.info(reasoning)
+            else:
+                st.write("No reasoning found in flow state.")
+                
+            if hasattr(res, 'assumptions_made') and res.assumptions_made:
+                st.divider()
+                st.caption(f"**Assumptions:** {res.assumptions_made}")
         
-        with st.expander("Query Results"):
-            st.write(res.query_results)
+        # C. Generated SQL Query (MOVED UP)
+        with st.expander("🛠️ Generated SQL Query", expanded=True):
+            query = getattr(res, 'generated_query', '')
+            if query:
+                st.code(query, language="sql")
+            else:
+                st.write("No query generated.")
+
+        st.divider()
+
+        # D. Triage Findings (MOVED DOWN)
+        if st.session_state.final_answer:
+            st.markdown("### 🎯 Triage Findings")
+            # Displays the JSON findings from the final box in your terminal
+            if isinstance(st.session_state.final_answer, (dict, list)):
+                st.json(st.session_state.final_answer)
+            else:
+                st.info(st.session_state.final_answer)
+                
+    elif st.session_state.running:
+        st.warning("Agents are currently analyzing data...")
+        st.progress(0.5)
     else:
-        st.info("Results will appear here once the agents finish.")
+        st.info("Results will appear here once the hunt finishes.")
