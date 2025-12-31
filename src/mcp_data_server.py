@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Lightweight data-plane MCP stub for local development and testing.
 
 Exposes two tools via a simple line-delimited JSON stdin/stdout protocol:
