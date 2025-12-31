@@ -53,16 +53,33 @@ def decompose_hypothesis(hypothesis_id: str, hypothesis_text: str) -> Plan:
     """
     p = Plan(hypothesis_id=hypothesis_id, hypothesis_text=hypothesis_text)
     # Basic candidate selection: look for likely target column
+    prompt = textwrap.dedent(f"""
+        Write a SQL query to find events related to the hypothesis: '{hypothesis_text}'.
+        - The table is named `logs`.
+        - Select all columns.
+        - Filter `eventName` using a case-insensitive match for keywords in the hypothesis.
+        - Limit the results to 1000.
+    """)
+
+    # Add hypothesis-specific rules for handling missing values (null errorCode)
+    # By default, many threat hunts look for SUCCESSFUL malicious actions.
+    successful_action_hypotheses = {"2", "3", "5", "6", "7", "10"}
+    
+    if hypothesis_id in successful_action_hypotheses:
+        prompt += "\n- This is a successful action, so ensure that `errorCode` is NULL."
+    
+    # Hypothesis-specific overrides
+    if hypothesis_id == "1": # Sign-in Failures
+        prompt += "\n- The hypothesis is about failures, so ensure `errorCode` is NOT NULL."
+    elif hypothesis_id == "4": # Unauthorized API Calls
+        prompt += "\n- The hypothesis is about unauthorized calls, so filter for `errorCode` like 'AccessDenied' or 'UnauthorizedOperation'."
+    elif hypothesis_id == "8": # S3 Bucket Brute Force
+        prompt += "\n- The hypothesis is about brute-forcing names, so filter for `errorCode` equal to 'NoSuchBucket'."
+        
     sel = PlanStep(
         name="candidate_selection",
         description="Select candidate entities matching hypothesis keywords",
-        query_prompt=textwrap.dedent(f"""
-            Write a SQL query to find events related to the hypothesis: '{hypothesis_text}'.
-            - The table is named `logs`.
-            - Select all columns.
-            - Filter `eventName` using a case-insensitive match for keywords in the hypothesis.
-            - Limit the results to 1000.
-        """),
+        query_prompt=prompt,
     )
     p.add_step(sel)
     return p
