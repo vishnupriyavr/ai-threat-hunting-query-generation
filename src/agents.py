@@ -1,19 +1,16 @@
-from crewai.mcp import MCPServerStdio
+from crewai.mcp import MCPServerTcp # CHANGE from MCPServerStdio for dockerized TCP MCP servers
 from crewai import Agent
 
-# 1. Neo4j MCP Server (Requires the 'neo4j-mcp' binary installed locally)
-neo4j_mcp = MCPServerStdio(
-    command="neo4j-mcp",
-    args=["neo4j_mcp_server.py"], # Uses the local MCP server script
-    env={"NEO4J_READ_ONLY": "false"} # Allow the Architect to update the schema
+# 1. Neo4j MCP Server
+neo4j_mcp = MCPServerTcp(
+    host="neo4j-mcp-server", # Service name from docker-compose.yml
+    port=5002 # Custom port for neo4j_mcp_server
 )
 
-# 2. Local Data Server (Custom Python script to handle the 1.9M row CSV via DuckDB)
-# This acts as the MCP bridge for the Profiler and Triage agents
-data_mcp = MCPServerStdio(
-    command="python",
-    args=["mcp_data_server.py"], # A local script implementing the MCP protocol
-    env={"CSV_PATH": "nineteenFeaturesDf.csv"}
+# 2. Local Data Server
+data_mcp = MCPServerTcp(
+    host="data-mcp-server", # Service name from docker-compose.yml
+    port=5001 # Custom port for mcp_data_server
 )
 
 # 1. The Data Profiler (EDA Agent)

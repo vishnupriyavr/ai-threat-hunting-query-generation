@@ -1,91 +1,80 @@
 version: '3.8'
+
 services:
-  app:
+  data-mcp-server:
     build: .
-    container_name: ai-threat-app
-    volumes:
-      - ./:/app
-    env_file: .env
+    command: python src/mcp_data_server.py
     environment:
-      - OPENAI_API_KEY
-      - NEO4J_URI
-      - NEO4J_USER
-      - NEO4J_PASSWORD
-    command: tail -f /dev/null
-
-  jupyter:
-    build: .
-    container_name: ai-threat-jupyter
-    volumes:
-      - ./:/app
-    ports:
-      - "8888:8888"
-    env_file: .env
-    command: jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --NotebookApp.token=''
-
-  eval:
-    build: .
-    container_name: ai-threat-eval
-    volumes:
-      - ./:/app
-    env_file: .env
-    depends_on:
-      - app
-    entrypoint: ["bash", "-lc"]
-    command: "python evaluation.py --outcomes assignment/hypotheses_outcomes.json --hypotheses assignment/hypotheses.json --out EVALUATION_REPORT_generated.md --eval_out evaluation_results.json"
-
-  data-mcp:
-    build: .
-    container_name: ai-threat-data-mcp
-    volumes:
-      - ./:/app
-    env_file: .env
-    environment:
-      - CSV_PATH
-    depends_on:
-      - app
-    command: ["python", "src/mcp_data_server.py"]
-    restart: unless-stopped
+      CSV_PATH: /app/dataset/nineteenFeaturesDf.csv
+      MCP_TCP_PORT: 5001
     ports:
       - "5001:5001"
-
-  neo4j-mcp:
-    build: .
-    container_name: ai-threat-neo4j-mcp
     volumes:
-      - ./:/app
-    env_file: .env
+      - .:/app
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((\"localhost\", 5001)); s.close()'"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    env_file:
+      - .env
+
+  neo4j-mcp-server:
+    build: .
+    command: python src/neo4j_mcp_server.py
     environment:
-      - MCP_TCP_PORT=5002
-    depends_on:
-      - app
-    command: ["python", "src/neo4j_mcp_server.py"]
-    restart: unless-stopped
+      MCP_TCP_PORT: 5002
+      NEO4J_READ_ONLY: "false" # Allow the Architect to update the schema
     ports:
       - "5002:5002"
-
-  neo4j:
-    image: neo4j:5.11.0
-    container_name: ai-threat-neo4j
-    environment:
-      - NEO4J_AUTH=${NEO4J_USER}/${NEO4J_PASSWORD}
-      - NEO4J_dbms_default__listen__address=0.0.0.0
+    volumes:
+      - .:/app
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((\"localhost\", 5002)); s.close()'"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    env_file:
+      - .env
+  
+  streamlit-app:
+    build: .
+    command: streamlit run frontend/streamlit_app.py --server.port 8501 --server.enableCORS false --server.enableXsrfProtection false
     ports:
-      - "7474:7474"
-      - "7687:7687"
+      - "8501:8501"
     volumes:
-      - ./neo4j/data:/data
-      - ./neo4j/import:/var/lib/neo4j/import
-      - ./scripts/neo4j:/init
-    restart: unless-stopped
-
-  neo4j-init:
-    image: neo4j:5.11.0
-    container_name: ai-threat-neo4j-init
+      - .:/app
+    environment:
+      # These environment variables are crucial for the agents to connect to the MCP servers
+      # The values here must match the service names and ports defined above
+      DATA_MCP_HOST: data-mcp-server
+      DATA_MCP_PORT: 5001
+      NEO4J_MCP_HOST: neo4j-mcp-server
+      NEO4J_MCP_PORT: 5002
     depends_on:
-      - neo4j
-    env_file: .env
+      data-mcp-server:
+        condition: service_healthy
+      neo4j-mcp-server:
+        condition: service_healthy
+    env_file:
+      - .env
+
+  eval-runner:
+    build: .
+    command: python run_all_hunts.py
     volumes:
-      - ./scripts/neo4j:/init
-    entrypoint: ["bash","-c","until cypher-shell -u ${NEO4J_USER} -p ${NEO4J_PASSWORD} 'RETURN 1' >/dev/null 2>&1; do echo 'waiting for neo4j...'; sleep 1; done; echo 'running init cql'; cypher-shell -u ${NEO4J_USER} -p ${NEO4J_PASSWORD} < /init/init_ontology.cql; echo 'neo4j init finished'"]
-    restart: 'no'
+      - .:/app
+    environment:
+      # These environment variables are crucial for the agents to connect to the MCP servers
+      # The values here must match the service names and ports defined above
+      DATA_MCP_HOST: data-mcp-server
+      DATA_MCP_PORT: 5001
+      NEO4J_MCP_HOST: neo4j-mcp-server
+      NEO4J_MCP_PORT: 5002
+    depends_on:
+      data-mcp-server:
+        condition: service_healthy
+      neo4j-mcp-server:
+        condition: service_healthy
+    env_file:
+      - .env

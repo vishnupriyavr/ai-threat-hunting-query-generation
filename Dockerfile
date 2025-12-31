@@ -1,30 +1,19 @@
-FROM python:3.11-slim
+# Use a Python base image
+FROM python:3.11-slim-buster
 
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-
-# Install system dependencies required for some Python packages
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-       build-essential \
-       gcc \
-       git \
-       libxml2-dev \
-       libxslt1-dev \
-       libssl-dev \
-       libffi-dev \
-       libjpeg-dev \
-       zlib1g-dev \
-       curl \
-       ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
+# Set the working directory in the container
 WORKDIR /app
 
-# Install Python dependencies early (cache layer)
-COPY requirements.txt /app/requirements.txt
-RUN pip install --upgrade pip setuptools wheel \
-    && pip install --no-cache-dir -r requirements.txt
+# Copy the requirements file and install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy project
-COPY . /app
+# Copy the entire project context into the container
+COPY . .
+
+# Set environment variables for Python buffering
+ENV PYTHONUNBUFFERED=1
+
+# Expose ports for Streamlit (8501) and potentially MCP servers (5001, 5002)
+# These will be explicitly mapped in docker-compose.yml
+EXPOSE 8501
