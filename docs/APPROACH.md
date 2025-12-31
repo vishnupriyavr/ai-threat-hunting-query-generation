@@ -89,9 +89,9 @@ To run the application, follow these steps:
     ```
 
 ## Solving Technical Challenges Agentically
-**Nested JSON Hallucination:** Instead of humans teaching the agent, the Ontology Architect agent scans the first 5 rows of requestParameters during the EDA phase. It identifies the nested keys and stores them as "Verified Paths" in the Knowledge Graph for the Query Engineer to use. 
-**Large Result Sets:** The Triage Agent is programmed with a "Cost Guardrail." If a query is projected to scan too much data, it automatically forces the Planner to add a eventTime window constraint. 
-**Autonomous Discovery:** Once the 11 hypotheses from hypotheses.json are cleared, the system enters "Discovery Mode." The Strategist queries the Knowledge Graph for "orphaned" IP addresses that have no associated userIdentityuserName—automatically creating a new "Hypothesis 12: Anonymous Activity Detection. 
+- **Nested JSON Hallucination:** Instead of humans teaching the agent, the Ontology Architect agent scans the first 5 rows of requestParameters during the EDA phase. It identifies the nested keys and stores them as "Verified Paths" in the Knowledge Graph for the Query Engineer to use. 
+- **Large Result Sets:** The Triage Agent is programmed with a "Cost Guardrail." If a query is projected to scan too much data, it automatically forces the Planner to add a eventTime window constraint. 
+- **Autonomous Discovery:** Once the 11 hypotheses from hypotheses.json are cleared, the system enters "Discovery Mode." The Strategist queries the Knowledge Graph for "orphaned" IP addresses that have no associated userIdentityuserName—automatically creating a new "Hypothesis 12: Anonymous Activity Detection. 
 
 
 ## Why EDA is Essential Before Graph Construction
