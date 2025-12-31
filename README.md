@@ -112,73 +112,107 @@ graph TD
 
 ## Docker (optional)
 
-Use Docker and docker-compose for an easy, reproducible development environment.
+For an easy, reproducible development and execution environment, you can use Docker and `docker-compose`.
 
-Quick start:
+### Dockerfile Details
 
-1. Create a `.env` file in the repository root containing your secrets (example):
+The `Dockerfile` defines the base image and environment for all services:
+*   Uses `python:3.12-slim-bookworm` as the base image.
+*   Sets the working directory to `/app`.
+*   Creates a Python virtual environment (`/opt/venv`) and configures `PATH` to use it.
+*   Installs system-level build tools (e.g., `build-essential`) for Python package compilation.
+*   Installs all Python dependencies listed in `requirements.txt` into the virtual environment.
+*   Copies the entire project directory into the container.
 
-```bash
-OPENAI_API_KEY=your_key_here
-NEO4J_URI=bolt://neo4j:7687
-NEO4J_USER=neo4j
-NEO4J_PASSWORD=your_password
-```
+### Docker Compose Services (`docker-compose.yml`)
 
-2. Build and start services (Jupyter + eval example service):
+The `docker-compose.yml` file orchestrates several interconnected services:
 
-```bash
-docker-compose up --build jupyter
-# or run evaluation job once
-docker-compose up --build eval
-# start the local data MCP (DuckDB) server
-docker-compose up --build data-mcp
-```
+1.  **`data-mcp-server`**:
+    *   **Purpose**: Runs the `src/mcp_data_server.py`, which provides data profiling and query execution capabilities (e.g., via DuckDB).
+    *   **Configuration**:
+        *   Exposes port `5001`.
+        *   Reads data from `dataset/nineteenFeaturesDf.csv` (configurable via `CSV_PATH` environment variable).
+        *   Includes a health check to ensure the server is ready.
 
-3. Jupyter will be available at http://localhost:8888 (no token by default in this compose)
+2.  **`neo4j-mcp-server`**:
+    *   **Purpose**: Runs the `src/neo4j_mcp_server.py`, enabling the Architect agent to interact with and update the Neo4j knowledge graph schema.
+    *   **Configuration**:
+        *   Exposes port `5002`.
+        *   `NEO4J_READ_ONLY` is set to `"false"` to allow schema modifications.
+        *   Includes a health check to ensure the server is ready.
 
-Notes:
-- `app` service mounts the repo so you can edit files locally and the container sees them immediately.
-- Use `docker-compose run --rm app bash` to open an interactive shell in the app container.
+3.  **`streamlit-app`**:
+    *   **Purpose**: Hosts the interactive Streamlit user interface (`frontend/streamlit_app.py`) for initiating and monitoring threat hunts.
+    *   **Configuration**:
+        *   Exposes port `8501`.
+        *   **Dependencies**: Depends on both `data-mcp-server` and `neo4j-mcp-server` being healthy before starting, ensuring agents have access to necessary services.
+        *   Connects to MCP servers via `DATA_MCP_HOST`, `DATA_MCP_PORT`, `NEO4J_MCP_HOST`, and `NEO4J_MCP_PORT` environment variables (which map to the service names and ports defined in `docker-compose.yml`).
 
-Data MCP notes:
+4.  **`eval-runner`**:
+    *   **Purpose**: Executes the evaluation suite (`evals/run_all_hunts.py`) to run automated threat hunts and generate reports.
+    *   **Configuration**:
+        *   **Dependencies**: Also depends on `data-mcp-server` and `neo4j-mcp-server` being healthy.
+        *   Connects to MCP servers using similar environment variables as `streamlit-app`.
 
-- The `data-mcp` service runs `mcp_data_server.py` inside the container and reads the CSV specified by the `CSV_PATH` environment variable. Set `CSV_PATH` in your `.env` file or pass it at runtime:
+5.  **`neo4j`**:
+    *   **Purpose**: The Neo4j graph database instance.
+    *   **Configuration**:
+        *   Standard Neo4j Docker image.
+        *   Persists data in a Docker volume.
 
-```bash
-# in .env
-CSV_PATH=/app/nineteenFeaturesDf.csv
+6.  **`neo4j-init`**:
+    *   **Purpose**: A one-off service to initialize the Neo4j database with the ontology defined in `scripts/neo4j/init_ontology.cql`.
+    *   **Configuration**:
+        *   Runs `cypher-shell` to execute the CQL script.
+        *   **Dependencies**: Depends on the `neo4j` service being up.
 
-# or override on the command line
-CSV_PATH=./nineteenFeaturesDf.csv docker-compose up data-mcp
-```
+7.  **`jupyter`**:
+    *   **Purpose**: Provides a Jupyter Lab environment for interactive development and data exploration.
+    *   **Configuration**:
+        *   Exposes port `8888`.
 
-To run the Neo4j MCP stub as a service (useful for integration tests):
+All services configured in `docker-compose.yml` share a common network, allowing them to communicate using their service names as hostnames (e.g., `data-mcp-server`, `neo4j-mcp-server`). Additionally, local code changes are mounted into the containers (`.:/app`) for a seamless development experience.
 
-```bash
-docker-compose up --build neo4j-mcp
-```
+### Quick Start with Docker
+
+1.  **Create a `.env` file**: In the repository root, create a `.env` file containing your secrets and configurations:
+    ```bash
+    OPENAI_API_KEY=your_key_here
+    NEO4J_URI=bolt://neo4j:7687 # Use 'neo4j' as hostname for Docker
+    NEO4J_USER=neo4j
+    NEO4J_PASSWORD=your_password
+    CSV_PATH=dataset/nineteenFeaturesDf.csv # Path to your dataset within the container
+    ```
+
+2.  **Initialize Neo4j (if not already running)**:
+    ```bash
+    docker-compose up -d neo4j
+    docker-compose run --rm neo4j-init
+    ```
+
+3.  **Build and Start Services**:
+    *   **To start the Streamlit app (and dependent MCP servers)**:
+        ```bash
+        docker-compose up --build streamlit-app
+        ```
+        Your Streamlit app will be available at `http://localhost:8501`.
+    *   **To run the evaluation job once**:
+        ```bash
+        docker-compose up --build eval-runner
+        ```
+    *   **To start the Jupyter Lab environment**:
+        ```bash
+        docker-compose up --build jupyter
+        ```
+        Jupyter will be available at `http://localhost:8888`.
+
+4.  **Interactive Shell**: To open an interactive shell in the `streamlit-app` (or any other) container:
+    ```bash
+    docker-compose run --rm streamlit-app bash
+    ```
 
 Each MCP stub can be exposed via a TCP port (configured by `MCP_TCP_PORT` in the compose file). The `data-mcp` service listens on port 5001 and `neo4j-mcp` listens on 5002 by default and can be queried using a single-line JSON protocol (send a JSON request ending with a newline, receive a JSON response).
-
-### Neo4j initialization
-
-You can run a Neo4j instance and initialize a small ontology (used by the Knowledge Graph) with the included init CQL.
-
-1. Ensure `.env` contains `NEO4J_USER` and `NEO4J_PASSWORD`.
-2. Start Neo4j:
-
-```bash
-docker-compose up -d neo4j
-```
-
-3. Run the initializer (single-run job):
-
-```bash
-docker-compose run --rm neo4j-init
-```
-
-This executes `scripts/neo4j/init_ontology.cql` via `cypher-shell` and creates a few example events, fields, constraints, and sample mappings.
 
 ## Streamlit Frontend (Interactive UI)
 
