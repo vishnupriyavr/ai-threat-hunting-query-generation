@@ -82,6 +82,24 @@ with col2:
         st.success("Hunt Complete!")
         st.metric("Total Retries", res.retry_count)
         
+        # New: Display Hypothesis Interpretation
+        if res.hypothesis_interpretation:
+            st.markdown(f"**Hypothesis Interpretation:** {res.hypothesis_interpretation}")
+
+        # New: Display Query Reasoning
+        if res.query_reasoning:
+            st.markdown(f"**Query Reasoning:** {res.query_reasoning}")
+
+        # New: Display Assumptions Made
+        if res.assumptions_made:
+            st.markdown(f"**Assumptions Made:** {res.assumptions_made}")
+
+        # New: Display Confidence Score
+        if res.confidence_score: # Only display if score is available (non-zero)
+            st.metric(f"Confidence Score", f"{res.confidence_score:.2f}%")
+            if res.confidence_explanation:
+                st.caption(f"Reasoning: {res.confidence_explanation}")
+        
         with st.expander("Generated Athena Query"):
             st.code(res.generated_query, language="sql")
         

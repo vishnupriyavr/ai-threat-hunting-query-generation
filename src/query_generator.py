@@ -3,6 +3,7 @@ from crewai.flow import start, listen, router, end
 from crewai.utilities.logger import log
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any
+import json
 
 from src.agents import profiler_agent, architect_agent, query_engineer, triage_agent
 from src.profiler import run_profiler
@@ -12,7 +13,7 @@ from src.planner import decompose_hypothesis, Plan
 def _build_query_from_plan(plan: Plan, event_name_filter: str) -> str:
     """Builds a full SQL query from a plan and an eventName filter string."""
     all_filters = []
-    if event_name_filter and "true" not in event_name_filter.lower():
+    if event_name_filter and "true" not in event_name_filter.lower(): # Check for potential LLM hallucination
         all_filters.append(f"({event_name_filter})")
 
     # Get the structured filters from the first step
@@ -52,6 +53,12 @@ class HuntState(BaseModel):
     plan: Plan | None = None
     retry_count: int = 0
     max_retries: int = 3
+    # New fields for output presentation
+    hypothesis_interpretation: str = ""
+    query_reasoning: str = ""
+    assumptions_made: str = ""
+    confidence_score: float = 0.0
+    confidence_explanation: str = ""
 
 
 @Flow
@@ -85,19 +92,45 @@ class AgenticThreatHunt:
         log.info("Phase B: Strategist and Engineer collaborate to run the hunt.")
         if not state.plan or state.retry_count > 0: # Always regen plan on retry
             state.plan = decompose_hypothesis(state.current_hypothesis_id, state.hypothesis_text)
+            state.hypothesis_interpretation = state.plan.hypothesis_interpretation
         
-        # The prompt now asks for a WHERE clause fragment for eventName
-        event_name_prompt = state.plan.generate()
-        event_name_filter = query_engineer.execute_task(event_name_prompt)
+        # The prompt now asks for a JSON object from query_engineer
+        query_engineer_json_prompt = state.plan.generate()
+        query_engineer_response = query_engineer.execute_task(query_engineer_json_prompt)
+
+        # Parse the JSON response from query_engineer
+        try:
+            parsed_response = json.loads(query_engineer_response)
+            event_name_filter = parsed_response.get('filter', '')
+            state.query_reasoning = parsed_response.get('reasoning', '') # NEW
+            state.assumptions_made = parsed_response.get('assumptions', '') # NEW
+        except json.JSONDecodeError:
+            log.error(f"Failed to parse JSON from query_engineer: {query_engineer_response}")
+            event_name_filter = query_engineer_response # Fallback to raw response if not JSON
+            state.query_reasoning = "Could not extract reasoning from query engineer's response."
+            state.assumptions_made = "Could not extract assumptions from query engineer's response."
+
 
         # Deterministically build the final query
         state.generated_query = _build_query_from_plan(state.plan, event_name_filter)
         log.info(f"Generated Query: {state.generated_query}")
 
-        state.query_results = triage_agent.execute_task(
-            task="Execute the generated query and return the results.",
-            context={"sql_query": state.generated_query}
+        # The triage_agent returns a dictionary including confidence and explanation
+        triage_response = triage_agent.execute_task(
+            task="Execute the generated query and return the results, along with confidence score and explanation.",
+            context={"sql_query": state.generated_query, "hypothesis_text": state.hypothesis_text}
         )
+        
+        # Expecting triage_response to be a dictionary from result_summarizer
+        if isinstance(triage_response, dict):
+            state.query_results = triage_response.get('rows', [])
+            state.confidence_score = triage_response.get('confidence', 0.0) # NEW
+            state.confidence_explanation = triage_response.get('explanation', '') # NEW
+        else:
+            state.query_results = triage_response # Fallback if not a dict
+            log.error(f"Triage agent did not return expected dictionary format. Got: {triage_response}")
+            state.confidence_explanation = "Triage agent returned unexpected format."
+
         log.info("Query executed. Results obtained.")
         return state
 

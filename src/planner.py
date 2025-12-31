@@ -12,6 +12,8 @@ from typing import List, Dict, Any
 import itertools
 import textwrap
 
+from src.agents import architect_agent
+
 
 @dataclass
 class PlanStep:
@@ -26,6 +28,7 @@ class PlanStep:
 class Plan:
     hypothesis_id: str
     hypothesis_text: str
+    hypothesis_interpretation: str = "" 
     steps: List[PlanStep] = field(default_factory=list)
     current_step: int = 0
 
@@ -52,13 +55,21 @@ def decompose_hypothesis(hypothesis_id: str, hypothesis_text: str) -> Plan:
     This version creates a textual prompt that can be passed to a generation
     agent rather than a hardcoded query template.
     """
-    p = Plan(hypothesis_id=hypothesis_id, hypothesis_text=hypothesis_text)
+    # Generate hypothesis interpretation using architect_agent
+    interpretation_prompt = f"Interpret the following threat hunting hypothesis in one concise sentence: '{hypothesis_text}'"
+    hypothesis_interpretation = architect_agent.execute_task(interpretation_prompt)
+
+    p = Plan(
+        hypothesis_id=hypothesis_id, 
+        hypothesis_text=hypothesis_text,
+        hypothesis_interpretation=hypothesis_interpretation
+    )
 
     # Hypothesis-specific configs to handle different primary columns or complex prompts
     hypothesis_configs = {
         "9a": {
             "primary_col": "userAgent",
-            "prompt": textwrap.dedent(f"""
+            "base_prompt": textwrap.dedent(f"""
                 Write a SQL WHERE clause condition related to the hypothesis: '{hypothesis_text}'.
                 - The condition should find rows where the "userAgent" column contains keywords from the hypothesis (case-insensitive `ILIKE`), OR where the "userAgent" column IS NULL.
                 - Do NOT include the 'WHERE' keyword in your response.
@@ -67,7 +78,7 @@ def decompose_hypothesis(hypothesis_id: str, hypothesis_text: str) -> Plan:
         },
         "9b": {
             "primary_col": "userAgent",
-            "prompt": textwrap.dedent(f"""
+            "base_prompt": textwrap.dedent(f"""
                 Write a SQL WHERE clause condition related to the hypothesis: '{hypothesis_text}'.
                 - The condition should find rows where the "userAgent" column contains keywords from the hypothesis (case-insensitive `ILIKE`), OR where the "userAgent" column IS NULL.
                 - Do NOT include the 'WHERE' keyword in your response.
@@ -79,17 +90,28 @@ def decompose_hypothesis(hypothesis_id: str, hypothesis_text: str) -> Plan:
     config = hypothesis_configs.get(hypothesis_id, {})
     primary_col = config.get("primary_col", "eventName")
 
-    if "prompt" in config:
-        prompt = config["prompt"]
+    if "base_prompt" in config:
+        base_prompt_instruction = config["base_prompt"]
     else:
         # Default prompt for all other hypotheses
-        prompt = textwrap.dedent(f"""
+        base_prompt_instruction = textwrap.dedent(f"""
             Write a SQL WHERE clause condition to find events related to the hypothesis: '{hypothesis_text}'.
             - The table is named `logs`.
             - Only filter on the "{primary_col}" column using a case-insensitive `ILIKE` match for keywords in the hypothesis.
             - Do NOT include the 'WHERE' keyword in your response.
             - Do NOT add any filters for `errorCode`.
         """)
+
+    final_query_engineer_prompt = textwrap.dedent(f"""
+        Based on the following instructions, generate a JSON object with the keys 'filter', 'reasoning', and 'assumptions'.
+        The 'filter' key should contain only the SQL WHERE clause condition, as instructed.
+        The 'reasoning' key should explain how you structured the query.
+        The 'assumptions' key should list any assumptions you made (e.g., about 'recent' timeframe, specific values, etc.).
+        Ensure the JSON is perfectly valid and can be parsed directly.
+
+        Instructions for 'filter' key:
+        {base_prompt_instruction}
+    """)
 
     # Structured filters for deterministic query parts based on hypothesis
     filters = []
@@ -110,7 +132,7 @@ def decompose_hypothesis(hypothesis_id: str, hypothesis_text: str) -> Plan:
     sel = PlanStep(
         name="candidate_selection",
         description="Select candidate entities matching hypothesis keywords",
-        query_prompt=prompt,
+        query_prompt=final_query_engineer_prompt,
         structured_filters=filters
     )
     p.add_step(sel)
