@@ -180,6 +180,25 @@ docker-compose run --rm neo4j-init
 
 This executes `scripts/neo4j/init_ontology.cql` via `cypher-shell` and creates a few example events, fields, constraints, and sample mappings.
 
+## Streamlit Frontend (Interactive UI)
+
+An interactive Streamlit application is provided to allow users to easily kick off threat hunts, select hypotheses, and visualize the agent's thought process and results.
+
+### Features:
+*   **Hypothesis Selection**: Choose from a predefined list of threat hunting hypotheses.
+*   **Live Agent Activity Log**: View real-time logs of the agents' reasoning process, including EDA summaries, KG construction, query generation, and verification steps.
+*   **Structured Findings Display**: See the final generated SQL query, the agent's interpretation of the hypothesis, reasoning, assumptions made, and a confidence score for the hunt results.
+*   **Hunt Metrics**: Track retry counts and confidence scores for each hunt.
+
+### How to Run:
+1.  Ensure all [Setup Instructions](#1-setup-instructions) are completed.
+2.  Navigate to the project's root directory in your terminal.
+3.  Run the Streamlit application:
+    ```bash
+    streamlit run frontend/streamlit_app.py
+    ```
+4.  Your browser will automatically open to the Streamlit app (usually `http://localhost:8501`).
+
 ## Design Decisions and Trade-offs
 For a deeper dive into the thought process behind this project, including specific challenges encountered and explainability considerations, please refer to:
 *   [Challenges Faced](docs/CHALLENGES_FACED.md)
