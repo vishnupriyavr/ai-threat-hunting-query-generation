@@ -1,5 +1,5 @@
 from crewai import Crew, Flow
-from crewai.flow import start, listen, router, end
+from crewai.flow import start, listen, router
 from crewai.utilities.logger import log
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any
@@ -135,7 +135,7 @@ class AgenticThreatHunt:
         return state
 
     @router(execute_threat_hunt)
-    def verify_and_correct(self, state: HuntState) -> str:
+    def verify_and_correct(self, state: HuntState) -> str | None:
         log.info("The Triage Agent evaluates the results and decides if a retry is needed.")
         if not state.query_results and state.retry_count < state.max_retries:
             state.retry_count += 1
@@ -167,7 +167,6 @@ class AgenticThreatHunt:
             
         return "end_flow"
 
-    @end
     def end_flow(self, state: HuntState) -> HuntState:
         log.info("Threat hunt complete.")
         return state
