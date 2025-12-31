@@ -111,7 +111,6 @@ graph TD
 
     K -- uses --> S
     L -- uses --> T
-    N -- uses --> U
     O -- uses --> U & V
 ```
 
