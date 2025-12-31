@@ -67,15 +67,15 @@ graph TD
 
     subgraph "Docker Environment"
         B(docker-compose up)
-        C(app service)
-        D(data-mcp service)
-        E(neo4j-mcp service)
-        F(neo4j service)
-        G(neo4j-init service)
-        H(jupyter service)
+        C(streamlit-app)
+        D(data-mcp-server)
+        E(neo4j-mcp-server)
+        F(neo4j)
+        G(neo4j-init)
+        P(eval-runner)
     end
 
-    subgraph "Application Logic (in app service)"
+    subgraph "Application Logic"
         I(main.py)
         J(AgenticThreatHunt Flow)
         K(Profiler Agent)
@@ -83,18 +83,19 @@ graph TD
         M(Planner Agent)
         N(Query Engineer Agent)
         O(Triage Agent)
+        S(pandas_analyzer tool)
+        T(neo4j_cypher_executor tool)
+        U(athena_sql_executor tool)
+        V(result_summarizer tool)
     end
 
     A -- runs --> B
-    B -- starts --> C
-    B -- starts --> D
-    B -- starts --> E
-    B -- starts --> F
-    B -- starts --> G
-    B -- starts --> H
+    B -- starts --> C & D & E & F & G & P
 
     G -- initializes --> F
     C -- runs --> I
+    P -- runs --> I
+
     I -- starts --> J
 
     J -- uses --> K
@@ -103,11 +104,10 @@ graph TD
     J -- uses --> N
     J -- uses --> O
 
-    K -- interacts with --> D
-    L -- interacts with --> E
-    N -- receives plan from --> M
-    O -- interacts with --> D
-
+    K -- uses --> S
+    L -- uses --> T
+    N -- uses --> U
+    O -- uses --> U & V
 ```
 
 ## Docker (optional)
@@ -196,11 +196,6 @@ All services configured in `docker-compose.yml` share a common network, allowing
         ```bash
         docker-compose up --build eval-runner
         ```
-    *   **To start the Jupyter Lab environment**:
-        ```bash
-        docker-compose up --build jupyter
-        ```
-        Jupyter will be available at `http://localhost:8888`.
 
 4.  **Interactive Shell**: To open an interactive shell in the `streamlit-app` (or any other) container:
     ```bash
