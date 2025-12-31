@@ -1,6 +1,18 @@
+import logging
+import sys
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout) # Ensures logs go to Docker/Console
+    ]
+)
+
+logger = logging.getLogger(__name__)
 from crewai import Crew, Flow
 from crewai.flow import start, listen, router
-from crewai.utilities.logger import log
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any
 import json
@@ -66,7 +78,7 @@ class AgenticThreatHunt:
     
     @start
     def perform_autonomous_eda(self, state: HuntState) -> HuntState:
-        log.info("Phase A: The Profiler Agent analyzes the 1.9M row dataset.")
+        logger.info("Phase A: The Profiler Agent analyzes the 1.9M row dataset.")
         try:
             result = run_profiler()
         except Exception:
@@ -74,22 +86,22 @@ class AgenticThreatHunt:
                 "Perform a full cardinality and missingness check on nineteenFeaturesDf.csv"
             )
         state.eda_summary = result
-        log.info("EDA Complete: Hub entities identified.")
+        logger.info("EDA Complete: Hub entities identified.")
         return state
 
     @listen(perform_autonomous_eda)
     def construct_knowledge_graph(self, state: HuntState) -> HuntState:
-        log.info("Phase A: The Architect Agent builds the ontology in Neo4j.")
+        logger.info("Phase A: The Architect Agent builds the ontology in Neo4j.")
         architect_agent.execute_task(
             f"Update Neo4j ontology using these findings: {state.eda_summary}"
         )
         state.kg_schema_ready = True
-        log.info("Knowledge Graph schema constructed and ready.")
+        logger.info("Knowledge Graph schema constructed and ready.")
         return state
 
     @listen(construct_knowledge_graph)
     def execute_threat_hunt(self, state: HuntState) -> HuntState:
-        log.info("Phase B: Strategist and Engineer collaborate to run the hunt.")
+        logger.info("Phase B: Strategist and Engineer collaborate to run the hunt.")
         if not state.plan or state.retry_count > 0: # Always regen plan on retry
             state.plan = decompose_hypothesis(state.current_hypothesis_id, state.hypothesis_text)
             state.hypothesis_interpretation = state.plan.hypothesis_interpretation
@@ -105,7 +117,7 @@ class AgenticThreatHunt:
             state.query_reasoning = parsed_response.get('reasoning', '') # NEW
             state.assumptions_made = parsed_response.get('assumptions', '') # NEW
         except json.JSONDecodeError:
-            log.error(f"Failed to parse JSON from query_engineer: {query_engineer_response}")
+            logger.error(f"Failed to parse JSON from query_engineer: {query_engineer_response}")
             event_name_filter = query_engineer_response # Fallback to raw response if not JSON
             state.query_reasoning = "Could not extract reasoning from query engineer's response."
             state.assumptions_made = "Could not extract assumptions from query engineer's response."
@@ -113,7 +125,7 @@ class AgenticThreatHunt:
 
         # Deterministically build the final query
         state.generated_query = _build_query_from_plan(state.plan, event_name_filter)
-        log.info(f"Generated Query: {state.generated_query}")
+        logger.info(f"Generated Query: {state.generated_query}")
 
         # The triage_agent returns a dictionary including confidence and explanation
         triage_response = triage_agent.execute_task(
@@ -128,22 +140,22 @@ class AgenticThreatHunt:
             state.confidence_explanation = triage_response.get('explanation', '') # NEW
         else:
             state.query_results = triage_response # Fallback if not a dict
-            log.error(f"Triage agent did not return expected dictionary format. Got: {triage_response}")
+            logger.error(f"Triage agent did not return expected dictionary format. Got: {triage_response}")
             state.confidence_explanation = "Triage agent returned unexpected format."
 
-        log.info("Query executed. Results obtained.")
+        logger.info("Query executed. Results obtained.")
         return state
 
     @router(execute_threat_hunt)
     def verify_and_correct(self, state: HuntState) -> str | None:
-        log.info("The Triage Agent evaluates the results and decides if a retry is needed.")
+        logger.info("The Triage Agent evaluates the results and decides if a retry is needed.")
         if not state.query_results and state.retry_count < state.max_retries:
             state.retry_count += 1
-            log.warning(f"No results for Hypothesis {state.current_hypothesis_id}. Retrying...")
+            logger.warning(f"No results for Hypothesis {state.current_hypothesis_id}. Retrying...")
             return "execute_threat_hunt"
         
         if len(state.query_results) > 1000:
-            log.info("High volume of results detected. Performing cardinality check...")
+            logger.info("High volume of results detected. Performing cardinality check...")
             try:
                 import pandas as pd
                 results_df = pd.DataFrame(state.query_results)
@@ -155,18 +167,18 @@ class AgenticThreatHunt:
                     
                     # If >10% of results have a unique IP, it's likely a widespread event, not noise
                     if ip_to_row_ratio > 0.1:
-                        log.info(f"Cardinality analysis shows a high IP-to-row ratio ({ip_to_row_ratio:.2f}). Treating as a widespread event, not noise.")
+                        logger.info(f"Cardinality analysis shows a high IP-to-row ratio ({ip_to_row_ratio:.2f}). Treating as a widespread event, not noise.")
                         return "end_flow"
 
             except ImportError:
-                log.warning("Pandas is not installed. Falling back to simple row count for noise detection.")
+                logger.warning("Pandas is not installed. Falling back to simple row count for noise detection.")
             
-            log.info("Results deemed too noisy. Directing Strategist to refine filters.")
+            logger.info("Results deemed too noisy. Directing Strategist to refine filters.")
             state.plan.refine("further restrict the results")
             return "execute_threat_hunt"
             
         return "end_flow"
 
     def end_flow(self, state: HuntState) -> HuntState:
-        log.info("Threat hunt complete.")
+        logger.info("Threat hunt complete.")
         return state
