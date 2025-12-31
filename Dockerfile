@@ -4,6 +4,8 @@ FROM python:3.11-slim-bookworm
 # Set the working directory in the container
 WORKDIR /app
 
+ENV PYTHONPATH="/app"
+
 # Create the virtual environment
 RUN python -m venv /opt/venv
 
