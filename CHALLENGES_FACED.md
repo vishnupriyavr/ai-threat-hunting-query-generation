@@ -144,3 +144,13 @@ VI. The verify_and_correct function flags any query that returns over 1000 rows 
 
 This will make the verification process much more robust and prevent the system from mistakenly discarding evidence of a large-scale attack.
 High unique IP ratios are treated as widespread events, concluding the hunt; low ratios trigger query refinement. This improves threat detection accuracy.
+
+VII. Limited Scope of "Null-Aware" Logic - the previous change correctly focused on the errorCode column, but many other columns have missing values that can be significant (e.g., a missing userAgent could indicate a scripted attack). The logic isn't generalized to handle these other cases.
+
+  We can generalize the logic within the Planner to handle these cases, driven by the specific threat hypothesis.
+
+   1. Generalize the Planner: Enhancing the decompose_hypothesis function in src/planner.py. It currently assumes the main filter is always on eventName. We can modify it to use the correct primary filter column based on the hypothesis (e.g., using userAgent for hypothesis #9).
+
+   2. Implement Complex Logic in the Prompt: For a case like Hypothesis #9 ("Suspicious User Agents"), we want to check for either suspicious keywords or a missing userAgent. This requires an OR condition. Instead of over-complicating the structured filter builder, I will create a special, more detailed prompt for this specific hypothesis. This prompt will instruct the query_engineer to generate the combined ILIKE ... OR ... IS NULL clause for the userAgent column.
+
+  This approach enhances the planner's flexibility, correctly handles a more complex logic for NULL values on other columns, and is a pragmatic way to solve the challenge without a major architectural overhaul.

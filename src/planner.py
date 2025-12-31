@@ -54,15 +54,44 @@ def decompose_hypothesis(hypothesis_id: str, hypothesis_text: str) -> Plan:
     """
     p = Plan(hypothesis_id=hypothesis_id, hypothesis_text=hypothesis_text)
 
-    prompt = textwrap.dedent(f"""
-        Write a SQL WHERE clause condition to find events related to the hypothesis: '{hypothesis_text}'.
-        - The table is named `logs`.
-        - Only filter on the `eventName` column using a case-insensitive `ILIKE` match for keywords in the hypothesis.
-        - Do NOT include the 'WHERE' keyword in your response.
-        - Do NOT add any filters for `errorCode`.
-        - Example response: "eventName" ILIKE '%some_keyword%' OR "eventName" ILIKE '%another_keyword%'
-    """)
+    # Hypothesis-specific configs to handle different primary columns or complex prompts
+    hypothesis_configs = {
+        "9a": {
+            "primary_col": "userAgent",
+            "prompt": textwrap.dedent(f"""
+                Write a SQL WHERE clause condition related to the hypothesis: '{hypothesis_text}'.
+                - The condition should find rows where the "userAgent" column contains keywords from the hypothesis (case-insensitive `ILIKE`), OR where the "userAgent" column IS NULL.
+                - Do NOT include the 'WHERE' keyword in your response.
+                - Example: ("userAgent" ILIKE '%keyword%') OR ("userAgent" IS NULL)
+            """)
+        },
+        "9b": {
+            "primary_col": "userAgent",
+            "prompt": textwrap.dedent(f"""
+                Write a SQL WHERE clause condition related to the hypothesis: '{hypothesis_text}'.
+                - The condition should find rows where the "userAgent" column contains keywords from the hypothesis (case-insensitive `ILIKE`), OR where the "userAgent" column IS NULL.
+                - Do NOT include the 'WHERE' keyword in your response.
+                - Example: ("userAgent" ILIKE '%keyword%') OR ("userAgent" IS NULL)
+            """)
+        }
+    }
+    
+    config = hypothesis_configs.get(hypothesis_id, {})
+    primary_col = config.get("primary_col", "eventName")
 
+    if "prompt" in config:
+        prompt = config["prompt"]
+    else:
+        # Default prompt for all other hypotheses
+        prompt = textwrap.dedent(f"""
+            Write a SQL WHERE clause condition to find events related to the hypothesis: '{hypothesis_text}'.
+            - The table is named `logs`.
+            - Only filter on the "{primary_col}" column using a case-insensitive `ILIKE` match for keywords in the hypothesis.
+            - Do NOT include the 'WHERE' keyword in your response.
+            - Do NOT add any filters for `errorCode`.
+        """)
+
+    # Structured filters for deterministic query parts based on hypothesis
     filters = []
     # By default, many threat hunts look for SUCCESSFUL malicious actions.
     successful_action_hypotheses = {"2", "3", "5", "6", "7", "10"}
@@ -70,7 +99,7 @@ def decompose_hypothesis(hypothesis_id: str, hypothesis_text: str) -> Plan:
     if hypothesis_id in successful_action_hypotheses:
         filters.append({"column": "errorCode", "operator": "IS NULL"})
     
-    # Hypothesis-specific overrides
+    # Hypothesis-specific overrides for errorCode
     if hypothesis_id == "1": # Sign-in Failures
         filters.append({"column": "errorCode", "operator": "IS NOT NULL"})
     elif hypothesis_id == "4": # Unauthorized API Calls
