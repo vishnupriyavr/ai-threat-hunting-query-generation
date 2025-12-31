@@ -63,7 +63,6 @@ The `Dockerfile` defines the environment for the Python application. It installs
 The `docker-compose.yml` file defines the services that make up the application. These services include:
 
 *   **`app`**: The main application service that runs the `crewai` flow.
-*   **`jupyter`**: A Jupyter Lab service for interactive data analysis and development.
 *   **`eval`**: A service for running evaluation scripts.
 *   **`data-mcp`**: A service that runs the `src/mcp_data_server.py` script, which provides tools for data analysis.
 *   **`neo4j`**: A service that runs a Neo4j database.
