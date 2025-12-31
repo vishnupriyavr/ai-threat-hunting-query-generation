@@ -11,7 +11,6 @@ graph TD
         E(neo4j-mcp-server)
         F(neo4j)
         G(neo4j-init)
-        H(jupyter)
         P(eval-runner)
     end
 
@@ -30,7 +29,7 @@ graph TD
     end
 
     A -- runs --> B
-    B -- starts --> C & D & E & F & G & H & P
+    B -- starts --> C & D & E & F & G & P
 
     G -- initializes --> F
     C -- runs --> I
@@ -48,9 +47,4 @@ graph TD
     L -- uses --> T
     N -- uses --> U
     O -- uses --> U & V
-
-    S -- interacts with --> D
-    T -- interacts with --> E
-    U -- interacts with --> D
-    V -- interacts with --> D
 ```

@@ -167,11 +167,6 @@ The `docker-compose.yml` file orchestrates several interconnected services:
         *   Runs `cypher-shell` to execute the CQL script.
         *   **Dependencies**: Depends on the `neo4j` service being up.
 
-7.  **`jupyter`**:
-    *   **Purpose**: Provides a Jupyter Lab environment for interactive development and data exploration.
-    *   **Configuration**:
-        *   Exposes port `8888`.
-
 All services configured in `docker-compose.yml` share a common network, allowing them to communicate using their service names as hostnames (e.g., `data-mcp-server`, `neo4j-mcp-server`). Additionally, local code changes are mounted into the containers (`.:/app`) for a seamless development experience.
 
 ### Quick Start with Docker
