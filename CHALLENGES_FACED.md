@@ -78,7 +78,7 @@ III. The core challenge of this project is bridging the significant semantic gap
    * Relationships: An IAMUser can perform an APICall; an APICall can target a Resource; an EC2Instance has an InstanceType.
    * Attributes: An InstanceType has a size; an APICall can have an errorCode.
 
-  This turns raw strings from your dataset (eventName, userIdentitytype, etc.) into rich, interconnected entities, making the
+  This turns raw strings from the dataset (eventName, userIdentitytype, etc.) into rich, interconnected entities, making the
   data "smarter".
 
   3. It Enables More Flexible and Intelligent Query Generation.
