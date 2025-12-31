@@ -5,12 +5,12 @@ services:
     build: .
     command: python src/mcp_data_server.py
     environment:
-      CSV_PATH: /app/dataset/nineteenFeaturesDf.csv
+      CSV_PATH: dataset/nineteenFeaturesDf.csv
       MCP_TCP_PORT: 5001
     ports:
       - "5001:5001"
     volumes:
-      - .:/app
+      - .:/app    
     healthcheck:
       test: ["CMD-SHELL", "python -c 'import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((\"localhost\", 5001)); s.close()'"]
       interval: 5s
@@ -61,7 +61,7 @@ services:
 
   eval-runner:
     build: .
-    command: python run_all_hunts.py
+    command: python evals/run_all_hunts.py
     volumes:
       - .:/app
     environment:
