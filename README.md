@@ -18,7 +18,6 @@ To get started with the AI Threat Hunting - Query Generation System, please foll
 1.  **Clone the repository:**
     ```bash
     git clone https://github.com/your-repo/agentic-threat-hunter.git
-    cd agentic-threat-hunter
     ```
 2.  **Install requirements:**
     ```bash
