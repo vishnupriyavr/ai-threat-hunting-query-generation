@@ -1,16 +1,18 @@
-from crewai.mcp import MCPServerTcp # CHANGE from MCPServerStdio for dockerized TCP MCP servers
+from crewai.mcp import MCPServerHTTP
+from dotenv import load_dotenv
 from crewai import Agent
 
+# This MUST be called before you define any agents
+load_dotenv()
+
 # 1. Neo4j MCP Server
-neo4j_mcp = MCPServerTcp(
-    host="neo4j-mcp-server", # Service name from docker-compose.yml
-    port=5002 # Custom port for neo4j_mcp_server
+neo4j_mcp = MCPServerHTTP(
+    url="http://neo4j-mcp-server:5002", # Service name from docker-compose.yml
 )
 
 # 2. Local Data Server
-data_mcp = MCPServerTcp(
-    host="data-mcp-server", # Service name from docker-compose.yml
-    port=5001 # Custom port for mcp_data_server
+data_mcp = MCPServerHTTP(
+    url="http://data-mcp-server:5001", # Service name from docker-compose.yml
 )
 
 # 1. The Data Profiler (EDA Agent)

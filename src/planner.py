@@ -12,6 +12,7 @@ from typing import List, Dict, Any
 import itertools
 import textwrap
 
+from crewai import Task 
 from src.agents import architect_agent
 
 
@@ -50,22 +51,27 @@ class Plan:
 
 
 def decompose_hypothesis(hypothesis_id: str, hypothesis_text: str) -> Plan:
-    """Create a basic Plan from hypothesis text.
+    """Create a basic Plan from hypothesis text."""
+    
+    # 1. Create a Task for the interpretation
+    interpretation_desc = f"Interpret the following threat hunting hypothesis in one concise sentence: '{hypothesis_text}'"
+    
+    interpretation_task = Task(
+        description=interpretation_desc,
+        agent=architect_agent,
+        expected_output="A single concise sentence interpreting the threat hypothesis."
+    )
 
-    This version creates a textual prompt that can be passed to a generation
-    agent rather than a hardcoded query template.
-    """
-    # Generate hypothesis interpretation using architect_agent
-    interpretation_prompt = f"Interpret the following threat hunting hypothesis in one concise sentence: '{hypothesis_text}'"
-    hypothesis_interpretation = architect_agent.execute_task(interpretation_prompt)
+    # 2. Execute using the Task object
+    hypothesis_interpretation = architect_agent.execute_task(task=interpretation_task)
 
     p = Plan(
         hypothesis_id=hypothesis_id, 
         hypothesis_text=hypothesis_text,
-        hypothesis_interpretation=hypothesis_interpretation
+        hypothesis_interpretation=str(hypothesis_interpretation) # Ensure it's stringified
     )
 
-    # Hypothesis-specific configs to handle different primary columns or complex prompts
+    # Hypothesis-specific configs
     hypothesis_configs = {
         "9a": {
             "primary_col": "userAgent",
@@ -93,7 +99,6 @@ def decompose_hypothesis(hypothesis_id: str, hypothesis_text: str) -> Plan:
     if "base_prompt" in config:
         base_prompt_instruction = config["base_prompt"]
     else:
-        # Default prompt for all other hypotheses
         base_prompt_instruction = textwrap.dedent(f"""
             Write a SQL WHERE clause condition to find events related to the hypothesis: '{hypothesis_text}'.
             - The table is named `logs`.
@@ -106,27 +111,24 @@ def decompose_hypothesis(hypothesis_id: str, hypothesis_text: str) -> Plan:
         Based on the following instructions, generate a JSON object with the keys 'filter', 'reasoning', and 'assumptions'.
         The 'filter' key should contain only the SQL WHERE clause condition, as instructed.
         The 'reasoning' key should explain how you structured the query.
-        The 'assumptions' key should list any assumptions you made (e.g., about 'recent' timeframe, specific values, etc.).
+        The 'assumptions' key should list any assumptions you made.
         Ensure the JSON is perfectly valid and can be parsed directly.
 
         Instructions for 'filter' key:
         {base_prompt_instruction}
     """)
 
-    # Structured filters for deterministic query parts based on hypothesis
     filters = []
-    # By default, many threat hunts look for SUCCESSFUL malicious actions.
     successful_action_hypotheses = {"2", "3", "5", "6", "7", "10"}
     
     if hypothesis_id in successful_action_hypotheses:
         filters.append({"column": "errorCode", "operator": "IS NULL"})
     
-    # Hypothesis-specific overrides for errorCode
-    if hypothesis_id == "1": # Sign-in Failures
+    if hypothesis_id == "1": 
         filters.append({"column": "errorCode", "operator": "IS NOT NULL"})
-    elif hypothesis_id == "4": # Unauthorized API Calls
+    elif hypothesis_id == "4": 
         filters.append({"column": "errorCode", "operator": "IN", "value": ["AccessDenied", "UnauthorizedOperation"]})
-    elif hypothesis_id == "8": # S3 Bucket Brute Force
+    elif hypothesis_id == "8": 
         filters.append({"column": "errorCode", "operator": "=", "value": "NoSuchBucket"})
 
     sel = PlanStep(
