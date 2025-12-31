@@ -18,6 +18,7 @@ class PlanStep:
     name: str
     description: str
     query_prompt: str
+    structured_filters: List[Dict[str, Any]] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -52,34 +53,36 @@ def decompose_hypothesis(hypothesis_id: str, hypothesis_text: str) -> Plan:
     agent rather than a hardcoded query template.
     """
     p = Plan(hypothesis_id=hypothesis_id, hypothesis_text=hypothesis_text)
-    # Basic candidate selection: look for likely target column
+
     prompt = textwrap.dedent(f"""
-        Write a SQL query to find events related to the hypothesis: '{hypothesis_text}'.
+        Write a SQL WHERE clause condition to find events related to the hypothesis: '{hypothesis_text}'.
         - The table is named `logs`.
-        - Select all columns.
-        - Filter `eventName` using a case-insensitive match for keywords in the hypothesis.
-        - Limit the results to 1000.
+        - Only filter on the `eventName` column using a case-insensitive `ILIKE` match for keywords in the hypothesis.
+        - Do NOT include the 'WHERE' keyword in your response.
+        - Do NOT add any filters for `errorCode`.
+        - Example response: "eventName" ILIKE '%some_keyword%' OR "eventName" ILIKE '%another_keyword%'
     """)
 
-    # Add hypothesis-specific rules for handling missing values (null errorCode)
+    filters = []
     # By default, many threat hunts look for SUCCESSFUL malicious actions.
     successful_action_hypotheses = {"2", "3", "5", "6", "7", "10"}
     
     if hypothesis_id in successful_action_hypotheses:
-        prompt += "\n- This is a successful action, so ensure that `errorCode` is NULL."
+        filters.append({"column": "errorCode", "operator": "IS NULL"})
     
     # Hypothesis-specific overrides
     if hypothesis_id == "1": # Sign-in Failures
-        prompt += "\n- The hypothesis is about failures, so ensure `errorCode` is NOT NULL."
+        filters.append({"column": "errorCode", "operator": "IS NOT NULL"})
     elif hypothesis_id == "4": # Unauthorized API Calls
-        prompt += "\n- The hypothesis is about unauthorized calls, so filter for `errorCode` like 'AccessDenied' or 'UnauthorizedOperation'."
+        filters.append({"column": "errorCode", "operator": "IN", "value": ["AccessDenied", "UnauthorizedOperation"]})
     elif hypothesis_id == "8": # S3 Bucket Brute Force
-        prompt += "\n- The hypothesis is about brute-forcing names, so filter for `errorCode` equal to 'NoSuchBucket'."
-        
+        filters.append({"column": "errorCode", "operator": "=", "value": "NoSuchBucket"})
+
     sel = PlanStep(
         name="candidate_selection",
         description="Select candidate entities matching hypothesis keywords",
         query_prompt=prompt,
+        structured_filters=filters
     )
     p.add_step(sel)
     return p

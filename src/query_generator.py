@@ -9,6 +9,39 @@ from src.profiler import run_profiler
 from src.planner import decompose_hypothesis, Plan
 
 
+def _build_query_from_plan(plan: Plan, event_name_filter: str) -> str:
+    """Builds a full SQL query from a plan and an eventName filter string."""
+    all_filters = []
+    if event_name_filter and "true" not in event_name_filter.lower():
+        all_filters.append(f"({event_name_filter})")
+
+    # Get the structured filters from the first step
+    if plan.steps:
+        structured_filters = plan.steps[0].structured_filters
+        for f in structured_filters:
+            col = f["column"]
+            op = f["operator"]
+            
+            # Use double quotes for column names to handle case sensitivity
+            col_quoted = f'"{col}"'
+
+            if op in ("IS NULL", "IS NOT NULL"):
+                all_filters.append(f'{col_quoted} {op}')
+            elif op == "=":
+                val = f["value"]
+                all_filters.append(f"{col_quoted} = '{val}'")
+            elif op == "IN":
+                vals = ", ".join([f"'{v}'" for v in f["value"]])
+                all_filters.append(f'{col_quoted} IN ({vals})')
+
+    where_clause = " AND ".join(all_filters)
+    if not where_clause:
+        # Avoid a dangling WHERE if no filters exist
+        return "SELECT * FROM logs LIMIT 1000"
+
+    return f"SELECT * FROM logs WHERE {where_clause} LIMIT 1000"
+
+
 class HuntState(BaseModel):
     eda_summary: Dict[str, Any] = {}
     kg_schema_ready: bool = False
@@ -50,11 +83,15 @@ class AgenticThreatHunt:
     @listen(construct_knowledge_graph)
     def execute_threat_hunt(self, state: HuntState) -> HuntState:
         log.info("Phase B: Strategist and Engineer collaborate to run the hunt.")
-        if not state.plan:
+        if not state.plan or state.retry_count > 0: # Always regen plan on retry
             state.plan = decompose_hypothesis(state.current_hypothesis_id, state.hypothesis_text)
         
-        query_prompt = state.plan.generate()
-        state.generated_query = query_engineer.execute_task(query_prompt)
+        # The prompt now asks for a WHERE clause fragment for eventName
+        event_name_prompt = state.plan.generate()
+        event_name_filter = query_engineer.execute_task(event_name_prompt)
+
+        # Deterministically build the final query
+        state.generated_query = _build_query_from_plan(state.plan, event_name_filter)
         log.info(f"Generated Query: {state.generated_query}")
 
         state.query_results = triage_agent.execute_task(
