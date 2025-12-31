@@ -37,21 +37,27 @@ To get started with the AI Threat Hunting - Query Generation System, please foll
     For Docker-based setup, refer to the [Docker (optional)](#docker-optional) section.
 
 ## Architecture Overview
-The system follows a Plan-Execute-Verify cycle using a Multi-Agent orchestrator (CrewAI Flows). For a more in-depth explanation of the architectural approach, refer to the [Approach Document](docs/APPROACH.md).
 
-**Hypothesis Input:** The agent reads from hypotheses.json.
+The system employs a sophisticated Multi-Agent System (MAS) orchestrated by CrewAI Flows, following a rigorous Plan-Execute-Verify cycle. The core of this architecture is designed to translate high-level threat hunting hypotheses into actionable queries against security log datasets. For a more in-depth explanation of the architectural approach, refer to the [Approach Document](docs/APPROACH.md).
 
-**Knowledge Graph (KG) Lookup:** Instead of guessing, the agent queries Neo4j to find the correct AWS eventName and field mapping (e.g., mapping "Failed Login" to ConsoleLogin + responseElements).
+The system's components are primarily deployed using Docker and orchestrated via `docker-compose`, providing a reproducible development and execution environment. Key services include:
 
-**Query Generation Agent:** Uses the KG context to generate a precise SQL/Athena query.
+*   **Streamlit Application (`streamlit-app`)**: Serves as the interactive user interface, allowing users to select hypotheses and visualize the agents' real-time activity and hunt results.
+*   **Evaluation Runner (`eval-runner`)**: An automated service that executes predefined threat hunts for evaluation and reporting.
+*   **Microservice Communication Protocol (MCP) Servers**:
+    *   **`data-mcp-server`**: Provides data profiling and query execution functionalities, interacting with data sources like DuckDB.
+    *   **`neo4j-mcp-server`**: Enables the Architect agent to interact with and dynamically update the Neo4j knowledge graph schema.
+*   **Neo4j Database (`neo4j`)**: The central knowledge graph storing security ontology and schema information.
 
-**Execution Agent:** Runs the query against the CloudTrail logs.
+**Agentic Workflow Highlights:**
 
-**Verification Agent:** Reviews results. If 0 results are found due to syntax, it triggers a "Self-Correction" loop.
+*   **Hypothesis Input**: Threat hunting hypotheses are fed into the system (e.g., via the Streamlit app or evaluation runner).
+*   **Knowledge Graph (KG) Lookup**: Instead of guessing, agents query the Neo4j Knowledge Graph (via `neo4j-mcp-server`) to retrieve accurate AWS event names and field mappings.
+*   **Query Generation**: A specialized Query Engineer agent uses the KG context to generate precise SQL/Athena queries.
+*   **Execution**: An Execution Agent runs these queries against the CloudTrail logs (via `data-mcp-server`).
+*   **Verification & Self-Correction**: A Triage Agent reviews the query results. If results are zero, noisy, or indicate syntax errors, it triggers a "Self-Correction" loop, guiding other agents to refine the hypothesis or query.
 
-### Architecture Diagram
-
-**Notes:** The LLM never accesses raw log data — it uses schema and ontology context from the Knowledge Graph; the orchestrator manages planning and verification loops.
+**Notes**: The Large Language Model (LLM) never directly accesses raw log data, ensuring data privacy. Instead, it operates on schema and ontology context provided by the Knowledge Graph. The orchestrator manages complex planning and verification loops.
 
 
 ## Mermaid Diagram (renderable)
