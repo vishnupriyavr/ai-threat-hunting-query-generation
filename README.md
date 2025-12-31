@@ -199,6 +199,8 @@ An interactive Streamlit application is provided to allow users to easily kick o
     ```
 4.  Your browser will automatically open to the Streamlit app (usually `http://localhost:8501`).
 
+**[Watch a demo video here](https://youtu.be/b7iFoWwEAT4)**
+
 ## Design Decisions and Trade-offs
 For a deeper dive into the thought process behind this project, including specific challenges encountered and explainability considerations, please refer to:
 *   [Challenges Faced](docs/CHALLENGES_FACED.md)
